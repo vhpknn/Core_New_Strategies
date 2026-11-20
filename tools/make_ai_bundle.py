@@ -29,6 +29,8 @@ SHARED_DOCS = [
     "docs/decisions/STRATEGY_DECISIONS.md",
     "docs/decisions/D-18_strategy_file_naming.md",
     "docs/decisions/D-19_work_rules.md",
+]
+FULL_DOCS = [   # ใส่เมื่อใช้ --full (โหมดเริ่มต้น lite ตัดออกเพื่อประหยัด Token)
     "docs/decisions/D-26_inputs_language_panel_lock.md",
     "docs/decisions/D-27_instance_lock.md",
     "docs/decisions/D-28_version_naming_and_v101_scope.md",
@@ -38,7 +40,8 @@ CONSULT_DOCS = ["docs/AI_START_PROMPT.md", "docs/SPEC_FORM.md", "docs/BLUEPRINT.
                 "docs/handoff/HANDOFF_NEW_STRATEGY.md"]
 BUILD_DOCS = ["docs/SPEC_FORM.md", "docs/BLUEPRINT.md", "docs/handoff/HANDOFF_NEW_STRATEGY.md",
               "docs/work/TEST_MATRIX.md"]
-CORE_API_FILES = ("Core_StrategyAPI.mqh", "Core_Runtime.mqh", "Core_Engine.mqh", "Core_InputsEN.mqh", "Core_Pending.mqh")
+CORE_API_LITE = ("Core_StrategyAPI.mqh", "Core_Runtime.mqh", "Core_Engine.mqh")
+CORE_API_FILES = CORE_API_LITE + ("Core_InputsEN.mqh", "Core_Pending.mqh")   # ใช้กับ --full
 
 BASE_PROMPT = """คุณจะรับงานกลยุทธ์ใหม่บน EA Platform Core (MQL5, MetaTrader 5) คุณเข้า GitHub ไม่ได้ ข้อมูลทั้งหมดอยู่ในไฟล์ที่แนบ
 
@@ -115,31 +118,35 @@ def rel_files(rel_dir, patterns):
     return out
 
 
-def example_code():
-    return (rel_files("reference/Hedge_example", ["Hedge_EA*.mq5"])
-            + rel_files("reference/Hedge_example/include", ["*.mqh"]))
+def example_code(full=False):
+    if full:
+        return (rel_files("reference/Hedge_example", ["Hedge_EA*.mq5"])
+                + rel_files("reference/Hedge_example/include", ["*.mqh"]))
+    return (rel_files("reference/Hedge_example", ["Hedge_EA.mq5"])
+            + rel_files("reference/Hedge_example/include", ["Hedge_Inputs.mqh"]))
 
 
-def lists_for(job, ver=None):
+def lists_for(job, ver=None, full=False):
     name = identity().get("name") or "Template"
     cv = latest_version(ROOT / "Core")
     sver = ver or latest_version(ROOT / "Strategies" / name)
-    docs = list(SHARED_DOCS)
+    docs = list(SHARED_DOCS) + (FULL_DOCS if full else [])
+    core_names = CORE_API_FILES if full else CORE_API_LITE
     code = []
     if job == "consult":
         docs += CONSULT_DOCS
         if cv:
-            code += ["Core/%s/include/%s" % (cv, n) for n in CORE_API_FILES]
-        code += example_code()
+            code += ["Core/%s/include/%s" % (cv, n) for n in core_names]
+        code += example_code(full)
     elif job == "build":
         docs += BUILD_DOCS
         sdir = "Strategies/%s/%s" % (name, sver)
         code += rel_files(sdir, [name + "_EA*.mq5"]) + rel_files(sdir + "/include", ["*.mqh"])
-        code += ["%s/Core/include/%s" % (sdir, n) for n in CORE_API_FILES]
+        code += ["%s/Core/include/%s" % (sdir, n) for n in core_names]
         sets = rel_files(sdir + "/Set", ["*.set"])
         if sets:
             code.append(sets[0])
-        code += example_code()
+        code += example_code(full)
     else:
         docs += sorted(rel_files("docs/work", ["CORE_UPDATE_*.md"]), key=lambda p: os.path.getmtime(ROOT / p))[-1:]
         for p in sorted((ROOT / "Core").glob("v*/include/Core_StrategyAPI.mqh"), key=lambda p: version_key(p.parts[-3])):
@@ -152,11 +159,11 @@ def lists_for(job, ver=None):
     return docs, code, scope
 
 
-def all_listed():
+def all_listed(full=True):
     docs, code = [], []
     for job in ("consult", "build", "coreupdate"):
         try:
-            d, c, _ = lists_for(job)
+            d, c, _ = lists_for(job, None, full)
         except Exception:
             continue
         for x in d:
@@ -201,6 +208,7 @@ def main():
     ap.add_argument("--version", help="รุ่นของกลยุทธ์ เช่น v1.1 (ไม่ระบุ = ล่าสุด)")
     ap.add_argument("--add", action="append", default=[], help="เพิ่มไฟล์ (path ใน Repo หรือ path เต็ม) ทำซ้ำได้")
     ap.add_argument("--redact", action="append", default=[], help="ข้อความที่จะแทนด้วย [REDACTED] ทำซ้ำได้")
+    ap.add_argument("--full", action="store_true", help="รวมไฟล์ครบ (ค่าเริ่มต้น lite ตัดมติ D-26 ถึง D-28, README_tools, Core_InputsEN, Core_Pending และตัวอย่าง Hedge ส่วนใหญ่ออกเพื่อประหยัด Token)")
     ap.add_argument("--out", default="ai_bundle")
     ap.add_argument("--force", action="store_true", help="สร้างต่อแม้ check_docs พบ ERROR")
     args = ap.parse_args()
@@ -212,7 +220,7 @@ def main():
         return 1
 
     job = args.job
-    docs, code, scope = lists_for(job, args.version)
+    docs, code, scope = lists_for(job, args.version, args.full)
     docs, code = list(docs), list(code)
     for a in args.add:
         norm = a.replace("\\", "/")
@@ -222,7 +230,7 @@ def main():
             code.append(a)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    out = ROOT / args.out / (job + "_" + stamp)
+    out = ROOT / args.out / (job + ("_full" if args.full else "_lite") + "_" + stamp)
     files_dir = out / "files"
     files_dir.mkdir(parents=True, exist_ok=True)
 
@@ -277,6 +285,7 @@ def main():
 
     total = sum(n for _, n, _ in manifest)
     print("สร้างชุดไฟล์ที่:", out)
+    print("โหมด:", "full (ไฟล์ครบ)" if args.full else "lite (ค่าเริ่มต้น ใช้ --full ถ้าต้องการไฟล์ครบ)")
     print("รวม %d ไฟล์ ประมาณ %d ตัวอักษร (เนื้อหาไทยใช้ Token มาก ถ้า Chatbot รับไม่ไหว ให้ตัดไฟล์ใหญ่ออกหรือแยกส่งเป็นรอบ)" % (len(manifest), total))
     print("ส่งให้ AI: 00_START_PROMPT.txt (วางเป็นข้อความ) + 01_DOCS_BUNDLE.md + 02_CODE_BUNDLE.txt")
     if missing:
