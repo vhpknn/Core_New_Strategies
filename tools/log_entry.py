@@ -65,6 +65,9 @@ def find_log(arg):
             print("[ERROR] ไม่พบไฟล์ LOG: %s" % arg)
             return None
         return p
+    default = WORK / "LOG.md"
+    if default.is_file():
+        return default
     files = sorted(WORK.glob("LOG_*.md"), key=lambda f: f.stat().st_mtime)
     if not files:
         print("[ERROR] ไม่พบ docs/work/LOG_*.md (สร้างจากแม่แบบ LOG_Core_v1.0.1.md ก่อน)")
@@ -296,6 +299,7 @@ def build_draft(args, log_path, entries):
 
     title = args.title if args.title else BLANK
     what = BLANK
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
     if items and not args.no_suggest:
         if not args.title:
             title = suggest_title(items) + " " + REVIEW

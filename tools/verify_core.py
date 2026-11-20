@@ -14,7 +14,7 @@ from _common import (ROOT, THEME_REF, all_core_includes, check_comment,
                      core_source_for_copy, find_core_copies,
                      find_strategy_dirs, latest_core_include, parse_ea_defines,
                      parse_registry, read_set, read_text, sha256_file)
-from next_magic import used_magics
+# (next_magic ถูกตัดออกจากแม่แบบ: ไม่มีทะเบียน Magic กลาง)
 from sync_core import compare
 
 errors, warns = [], []
@@ -111,9 +111,7 @@ def check_theme(src, ref):
 
 def check_strategies():
     print("\n[3] กลยุทธ์: ทะเบียน Magic + EA + ไฟล์ .set")
-    tags, _ = parse_registry()
-    if not tags:
-        warn("อ่านทะเบียน Magic ไม่ได้ (docs/decisions/MAGIC_REGISTRY.md)")
+    tags, _ = parse_registry()   # แม่แบบนี้ไม่มีทะเบียนกลาง (tags ว่าง = ข้ามการเทียบทะเบียน)
     strategies = find_strategy_dirs()
     if not strategies:
         warn("ไม่พบกลยุทธ์ (Strategies/<ชื่อ>/v*/<ชื่อ>_EA.mq5)")
@@ -130,6 +128,11 @@ def check_strategies():
             err("%s: TAG %s / ลำดับ %d ไม่ตรงทะเบียน" % (name, d["TAG"], d["ORDINAL"]))
         if d["BASE"] != d["ORDINAL"] * 10000:
             err("%s: STRATEGY_MAGIC_BASE %d != ลำดับ x 10000" % (name, d["BASE"]))
+        ident = ROOT / "STRATEGY_IDENTITY.txt"
+        if ident.exists():
+            iv = dict(l.split("=", 1) for l in read_text(ident)[0].splitlines() if "=" in l)
+            if iv.get("tag") != d["TAG"] or iv.get("magic_base") != str(d["BASE"]):
+                err("%s: STRATEGY_IDENTITY.txt ไม่ตรงกับ #define ใน EA (tag หรือ magic_base)" % name)
         setdir = vdir / "Set"
         sets = sorted(setdir.glob("*.set")) if setdir.is_dir() else []
         if not sets:
@@ -152,9 +155,9 @@ def check_strategies():
             if magic in global_magics and global_magics[magic][0] != name:
                 err("%s: Magic %d ซ้ำข้ามกลยุทธ์ กับ %s" % (s.name, magic, global_magics[magic][1]))
             global_magics[magic] = (name, s.name)
-        used = used_magics(d["TAG"], vdir)
+        used = list(seen.keys())
         if used and d["NEXT"] <= max(used):
-            warn("%s: STRATEGY_MAGIC_NEXT=%d ล้าสมัย (ใช้แล้วถึง %d) รัน next_magic --apply"
+            warn("%s: STRATEGY_MAGIC_NEXT=%d ล้าสมัย (ใช้แล้วถึง %d) แก้ #define ใน EA ให้มากกว่านี้"
                  % (name, d["NEXT"], max(used)))
         print("   ตรวจ .set แล้ว %d ไฟล์" % len(sets))
 

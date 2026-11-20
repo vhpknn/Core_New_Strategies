@@ -86,9 +86,7 @@ def main():
     last = [ln for ln in text.splitlines() if "สรุป" in ln]
     summary.append("verify_core=" + (last[-1].strip() if last else "exit " + str(code)))
 
-    code, text = run([py, str(TOOLS / "next_magic.py")])
-    section("next_magic (ดูอย่างเดียว)", code, text, lines)
-    summary.append("next_magic=exit " + str(code))
+    # next_magic ถูกตัดออกจากแม่แบบ (ไม่มีทะเบียน Magic กลาง)
 
     code, text = run([py, str(TOOLS / "check_docs.py")])
     section("check_docs (ตรวจเอกสาร)", code, text, lines)
